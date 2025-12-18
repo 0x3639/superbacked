@@ -1,13 +1,9 @@
 import { decrypt } from "blockcrypt"
-import { Payload } from "./create"
-import argon2 from "./utilities/argon2"
-import { concatenatePassphrases } from "./utilities/crypto"
-import { combineShares } from "./utilities/shamir"
 
-export interface Result {
-  error: string
-  message: string
-}
+import { Payload } from "@/src/create"
+import argon2 from "@/src/utilities/argon2"
+import { concatenatePassphrases } from "@/src/utilities/crypto"
+import { combineShares } from "@/src/utilities/shamir"
 
 const shamirShares: Buffer[] = []
 
@@ -23,6 +19,10 @@ const duplicateShamirShare = (additionalShamirShare: Buffer) => {
 export const restoreReset = () => {
   shamirShares.length = 0
 }
+
+export type Result =
+  | { message: string; success: true }
+  | { error: string; success: false }
 
 export default async (
   passphrases: string[],
@@ -58,22 +58,19 @@ export default async (
       const secret = await combineShares(shamirShares)
       restoreReset()
       return {
-        error: null,
         message: secret.toString(),
+        success: true,
       }
     } else {
       return {
-        error: null,
         message: message.toString(),
+        success: true,
       }
     }
   } catch (error) {
-    if (error.message.match(/header not found/i)) {
-      restoreReset()
-    }
     return {
-      error: error.message,
-      message: null,
+      error: error instanceof Error ? error.message : "Could not restore block",
+      success: false,
     }
   }
 }

@@ -1,5 +1,5 @@
 #! /bin/bash
-# Used to patch Ubuntu for desktops 24.04.1 LTS (Intel)
+# Used to patch Ubuntu for desktops 24.04.3 LTS (Intel)
 
 set -e
 set -o pipefail
@@ -33,7 +33,7 @@ sudo add-apt-repository --yes universe
 
 printf "%s\n" "Installing dependencies…"
 
-sudo apt install --yes curl libfuse2 overlayroot zbar-tools
+sudo apt install --yes curl libfuse2 overlayroot
 
 printf "%s\n" "Configuring fstab…"
 

@@ -14,6 +14,10 @@ if [ "$answer" = "y" ]; then
 
   printf "%s\n" "Building Superbacked app…"
 
+  npm run lint
+
+  npm run prebuild
+
   npm run build
 
   for file in dist/*.AppImage; do
@@ -29,16 +33,20 @@ if [ "$answer" = "y" ]; then
 
   find ./dist -type f \( -name "*.img*" \) -delete
 
-  printf "%s\n" "Check if Docker is running…"
+  printf "%s\n" "Starting Colima…"
 
-  docker ps
+  colima start \
+    --profile superbacked \
+    --cpu 4 \
+    --disk 100 \
+    --memory 8
 
   version=$(node --eval 'console.log(require("./package.json").version)')
 
   printf "%s\n" "Building Superbacked OS (amd64)…"
 
   cp \
-    superbacked-os/superbacked-os-amd64-24.04.1.img \
+    superbacked-os/superbacked-os-amd64-24.04.3.img \
     dist/superbacked-os-amd64-${version}.img
 
   docker run \
@@ -70,7 +78,7 @@ if [ "$answer" = "y" ]; then
   printf "%s\n" "Building Superbacked OS (arm64-raspi)…"
 
   cp \
-    superbacked-os/superbacked-os-arm64-raspi-24.04.1.img \
+    superbacked-os/superbacked-os-arm64-raspi-24.04.3.img \
     dist/superbacked-os-arm64-raspi-${version}.img
 
   docker run \
@@ -98,6 +106,10 @@ if [ "$answer" = "y" ]; then
     mv "$file" "dist/superbacked-os-arm64-raspi-${version}.img.xz.part$number"
     number=$((number + 1))
   done
+
+  printf "%s\n" "Stopping Colima…"
+
+  colima stop --profile superbacked
 fi
 
 code dist/superbacked-${version}-release-notes.txt

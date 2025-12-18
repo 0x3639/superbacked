@@ -1,4 +1,4 @@
-const os = require("os")
+import os from "os"
 
 const startBlock = /(\/\/|{\/\*) #if ((?:(?! \*\/}).)*)( \*\/})?/
 const endBlock = /(\/\/|{\/\*) #endif( \*\/})?$/
@@ -15,18 +15,20 @@ const parse = (sourceByLine) => {
       if (rule.exec(startBlockRule) && eval(startBlockRule) !== true) {
         pushLine = false
       }
-    }
-    if (pushLine === true) {
-      lines.push(line)
+      continue
     }
     if ((result = endBlock.exec(line))) {
       pushLine = true
+      continue
+    }
+    if (pushLine === true) {
+      lines.push(line)
     }
   }
   return lines
 }
 
-module.exports = (source) => {
+export default function loader(source) {
   try {
     const sourceByLine = source.split(os.EOL)
     const lines = parse(sourceByLine)

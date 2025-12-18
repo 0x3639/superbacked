@@ -1,19 +1,21 @@
-import { getDataLength } from "blockcrypt"
 import { contextBridge, ipcRenderer, IpcRendererEvent } from "electron"
-import create, { Result as CreateResult } from "../create"
-import duplicate, { Result as DuplicateResult } from "../duplicate"
-import { Locale } from "../i18n"
-import { CustomDesktopCapturerSource } from "../index"
-import { disableModes, enableModes } from "../menu"
-import openExternalUrl from "../openExternalUrl"
-import restore, { restoreReset, Result as RestoreResult } from "../restore"
+
+import { getDataLength } from "blockcrypt"
+
+import create, { Result as CreateResult } from "@/src/create"
+import duplicate, { Result as DuplicateResult } from "@/src/duplicate"
+import { Locale } from "@/src/i18n"
+import { GetDesktopCapturerSourcesResult } from "@/src/index"
+import { disableModes, enableModes } from "@/src/menu"
+import openExternalUrl from "@/src/openExternalUrl"
+import restore, { restoreReset, Result as RestoreResult } from "@/src/restore"
 import {
   generateMnemonic,
   validateMnemonic,
   wordlist,
-} from "../utilities/bip39"
-import { ColorScheme } from "../utilities/config"
-import generatePassphrase from "../utilities/passphrase"
+} from "@/src/utilities/bip39"
+import { ColorScheme } from "@/src/utilities/config"
+import generatePassphrase from "@/src/utilities/passphrase"
 import {
   getDefaultPrinter,
   getPrinters,
@@ -21,13 +23,9 @@ import {
   print,
   Printer,
   PrinterStatus,
-} from "../utilities/print"
-import save from "../utilities/save"
-import { generateToken } from "../utilities/totp"
-import {
-  decode as zbarDecode,
-  installed as zbarInstalled,
-} from "../utilities/zbarimg"
+} from "@/src/utilities/print"
+import save from "@/src/utilities/save"
+import { generateToken } from "@/src/utilities/totp"
 
 export type InsertType = "mnemonic" | "passphrase"
 
@@ -40,9 +38,8 @@ export interface Api {
   colorScheme: () => ColorScheme
   localeChange: (callback: (locale: Locale) => void) => () => void
   locale: () => Locale
-  getSources: () => Promise<CustomDesktopCapturerSource[]>
+  getDesktopCapturerSources: () => Promise<GetDesktopCapturerSourcesResult>
   platform: NodeJS.Platform
-  systemVersion: string
   version: () => number
   openExternalUrl: typeof openExternalUrl
   enableModes: (...args: Parameters<typeof enableModes>) => void
@@ -71,8 +68,6 @@ export interface Api {
   generateToken: typeof generateToken
   restore: typeof restore
   restoreReset: typeof restoreReset
-  zbarDecode: typeof zbarDecode
-  zbarInstalled: typeof zbarInstalled
 }
 
 const api: Api = {
@@ -100,28 +95,27 @@ const api: Api = {
   locale: () => {
     return ipcRenderer.sendSync("app:getLocale")
   },
-  getSources: async () => {
-    const sources: CustomDesktopCapturerSource[] = await ipcRenderer.invoke(
-      "desktopCapturer:getSources"
+  getDesktopCapturerSources: async () => {
+    const result: GetDesktopCapturerSourcesResult = await ipcRenderer.invoke(
+      "desktopCapturer:getDesktopCapturerSources"
     )
-    return sources
+    return result
   },
   platform: process.platform,
-  systemVersion: process.getSystemVersion(),
   version: () => {
     return ipcRenderer.sendSync("app:getVersion")
   },
   openExternalUrl: (...args) => {
-    ipcRenderer.invoke("app:openExternalUrl", ...args)
+    return ipcRenderer.invoke("app:openExternalUrl", ...args)
   },
   enableModes: (...args) => {
-    ipcRenderer.invoke("menu:enableModes", ...args)
+    return ipcRenderer.invoke("menu:enableModes", ...args)
   },
   disableModes: (...args) => {
-    ipcRenderer.invoke("menu:disableModes", ...args)
+    return ipcRenderer.invoke("menu:disableModes", ...args)
   },
   toggleMaximize: () => {
-    ipcRenderer.invoke("window:toggleMaximize")
+    return ipcRenderer.invoke("window:toggleMaximize")
   },
   menuAbout: (callback) => {
     const listener = () => {
@@ -205,6 +199,7 @@ const api: Api = {
     const passphrase = await ipcRenderer.invoke("generatePassphrase", ...args)
     return passphrase
   },
+  // @ts-expect-error Required so function overloads are preserved
   create: async (...args) => {
     const result: CreateResult = await ipcRenderer.invoke("create", ...args)
     return result
@@ -254,17 +249,6 @@ const api: Api = {
   },
   restoreReset: async (...args) => {
     await ipcRenderer.invoke("restoreReset", ...args)
-  },
-  zbarDecode: async (...args) => {
-    const result: string = await ipcRenderer.invoke("zbarimg:decode", ...args)
-    return result
-  },
-  zbarInstalled: async (...args) => {
-    const result: boolean = await ipcRenderer.invoke(
-      "zbarimg:installed",
-      ...args
-    )
-    return result
   },
 }
 

@@ -1,42 +1,48 @@
-import { getDataLength } from "blockcrypt"
-import { program as cli, Argument as CommanderArgument } from "commander"
 import {
   app,
   BrowserWindow,
   desktopCapturer,
   ipcMain,
   nativeTheme,
-  screen,
   session,
   WebFrameMain,
 } from "electron"
 import { URL } from "url"
-import create from "./create"
-import duplicate from "./duplicate"
+
+import { getDataLength } from "blockcrypt"
+import { program as cli, Argument as CommanderArgument } from "commander"
+
+import create from "@/src/create"
+import duplicate from "@/src/duplicate"
 import {
   defaultLocale,
   Locale,
   locales,
   setLocale as setLocaleI18n,
-} from "./i18n"
-import { disableModes, enableModes, setMenu, showHiddenSecrets } from "./menu"
-import openExternalUrl from "./openExternalUrl"
-import restore, { restoreReset } from "./restore"
-import { generateMnemonic, validateMnemonic, wordlist } from "./utilities/bip39"
-import { get as getConfig, set as setConfig } from "./utilities/config"
-import generatePassphrase from "./utilities/passphrase"
+} from "@/src/i18n"
+import {
+  disableModes,
+  enableModes,
+  setMenu,
+  showHiddenSecrets,
+} from "@/src/menu"
+import openExternalUrl from "@/src/openExternalUrl"
+import restore, { restoreReset } from "@/src/restore"
+import {
+  generateMnemonic,
+  validateMnemonic,
+  wordlist,
+} from "@/src/utilities/bip39"
+import { get as getConfig, set as setConfig } from "@/src/utilities/config"
+import generatePassphrase from "@/src/utilities/passphrase"
 import {
   getDefaultPrinter,
   getPrinters,
   getPrinterStatus,
   print,
-} from "./utilities/print"
-import save from "./utilities/save"
-import { generateToken } from "./utilities/totp"
-import {
-  decode as zbarDecode,
-  installed as zbarInstalled,
-} from "./utilities/zbarimg"
+} from "@/src/utilities/print"
+import save from "@/src/utilities/save"
+import { generateToken } from "@/src/utilities/totp"
 
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string
@@ -57,7 +63,9 @@ cli
       setConfig(key, value)
       process.exit(0)
     } catch (error) {
-      console.error(error.message)
+      console.error(
+        error instanceof Error ? error.message : "Could not run config"
+      )
       process.exit(1)
     }
   })
@@ -76,26 +84,22 @@ app.on("web-contents-created", (_event, contents) => {
   })
 })
 
-export interface CustomDesktopCapturerSource {
-  id: string
-  label: string
-  thumbnailDataUrl: string
-}
-
 export let locale: Locale = defaultLocale
 
-const systemLocale = app
-  .getPreferredSystemLanguages()[0]
-  .split("-")[0] as Locale
-if (locales.includes(systemLocale)) {
-  locale = systemLocale
+const preferredSystemLanguages = app.getPreferredSystemLanguages()
+const preferredLanguage = preferredSystemLanguages[0]
+if (preferredLanguage) {
+  const systemLocale = preferredLanguage.split("-")[0] as Locale
+  if (locales.includes(systemLocale)) {
+    locale = systemLocale
+  }
 }
 
-setLocaleI18n(locale)
+await setLocaleI18n(locale)
 
-export const setLocale = (updatedLocale: Locale) => {
+export const setLocale = async (updatedLocale: Locale) => {
   locale = updatedLocale
-  setLocaleI18n(updatedLocale)
+  await setLocaleI18n(updatedLocale)
   const windows = BrowserWindow.getAllWindows()
   for (const window of windows) {
     window.webContents.send("app:localeChange", updatedLocale)
@@ -110,19 +114,18 @@ export const shouldUseDarkColors = () => {
 }
 
 export const createWindow = async (): Promise<BrowserWindow> => {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const windowWidth = 800
     const windowHeight = 600
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize
-    const x = Math.floor((width - windowWidth) / 2)
-    const y = Math.floor((height - windowHeight) / 2)
     const mainWindow = new BrowserWindow({
       backgroundColor: shouldUseDarkColors() === true ? "#1c1b24" : "#ffffff",
       width: windowWidth,
       height: windowHeight,
       minWidth: windowWidth,
       minHeight: windowHeight,
-      titleBarStyle: "hidden",
+      show: false,
+      titleBarStyle: process.platform === "darwin" ? "hidden" : "default",
+      useContentSize: true,
       webPreferences: {
         contextIsolation: true, // default, see https://www.electronjs.org/docs/latest/tutorial/security#3-enable-context-isolation
         nodeIntegration: false, // default, see https://www.electronjs.org/docs/latest/tutorial/security#3-enable-context-isolation
@@ -130,14 +133,13 @@ export const createWindow = async (): Promise<BrowserWindow> => {
         preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
         sandbox: true,
       },
-      show: false,
-      x: x,
-      y: y,
     })
-    mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY)
-    mainWindow.once("ready-to-show", () => {
-      resolve(mainWindow)
+    mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY).catch((error) => {
+      reject(error)
+    })
+    mainWindow.webContents.once("did-finish-load", () => {
       mainWindow.show()
+      resolve(mainWindow)
     })
     mainWindow.on("enter-full-screen", () => {
       mainWindow.webContents.send("window:enteredFullScreen")
@@ -168,6 +170,19 @@ interface DefaultOptions {
   inspect: number
 }
 
+export interface CustomDesktopCapturerSource {
+  id: string
+  label: string
+  thumbnailDataUrl: string
+}
+
+export type GetDesktopCapturerSourcesResult =
+  | {
+      customDesktopCapturerSources: CustomDesktopCapturerSource[]
+      success: true
+    }
+  | { error: string; success: false }
+
 // Run Electron app
 cli
   // See https://www.electronjs.org/docs/latest/tutorial/debugging-main-process
@@ -178,18 +193,18 @@ cli
 
     setMenu()
 
-    app.on("activate", () => {
+    app.on("activate", async () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow()
+        await createWindow()
       }
     })
 
-    app.on("ready", () => {
+    app.on("ready", async () => {
       // Disable DNS-over-HTTPS (disables extraneous bootstrap requests that trigger Little Snitch warnings)
       app.configureHostResolver({
         secureDnsMode: "off",
       })
-      createWindow()
+      await createWindow()
       // Limit networking to trusted URLs
       session.defaultSession.webRequest.onBeforeSendHeaders(
         (details, callback) => {
@@ -229,64 +244,80 @@ cli
     })
 
     ipcMain.on("theme:getColorScheme", (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       event.returnValue = shouldUseDarkColors() === true ? "dark" : "light"
     })
 
     ipcMain.on("app:getLocale", (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       event.returnValue = locale
     })
 
-    ipcMain.handle("desktopCapturer:getSources", async (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+    ipcMain.handle(
+      "desktopCapturer:getDesktopCapturerSources",
+      async (event): Promise<GetDesktopCapturerSourcesResult> => {
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
+        }
+        try {
+          const sources = await desktopCapturer.getSources({
+            types: ["window"],
+          })
+          const customDesktopCapturerSources: CustomDesktopCapturerSource[] = []
+          for (const source of sources) {
+            customDesktopCapturerSources.push({
+              id: source.id,
+              label: source.name,
+              thumbnailDataUrl: source.thumbnail.toDataURL(),
+            })
+          }
+          return {
+            customDesktopCapturerSources: customDesktopCapturerSources,
+            success: true,
+          }
+        } catch (error) {
+          return {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Could not get desktop capturer sources",
+            success: false,
+          }
+        }
       }
-      const sources = await desktopCapturer.getSources({
-        types: ["window"],
-      })
-      const customDesktopCapturerSources: CustomDesktopCapturerSource[] = []
-      for (const source of sources) {
-        customDesktopCapturerSources.push({
-          id: source.id,
-          label: source.name,
-          thumbnailDataUrl: source.thumbnail.toDataURL(),
-        })
-      }
-      return customDesktopCapturerSources
-    })
+    )
 
     ipcMain.on("app:getVersion", (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       event.returnValue = app.getVersion()
     })
 
-    ipcMain.on("app:newWindow", () => {
-      // validateSender not required given message is emitted from menu
-      createWindow()
+    ipcMain.on("app:newWindow", async () => {
+      // Validating sender is not required given message is emitted from menu
+      await createWindow()
     })
 
     ipcMain.handle(
       "app:openExternalUrl",
-      (event, ...args: Parameters<typeof openExternalUrl>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+      async (event, ...args: Parameters<typeof openExternalUrl>) => {
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
-        openExternalUrl(...args)
+        await openExternalUrl(...args)
       }
     )
 
     ipcMain.handle(
       "menu:enableModes",
       (event, ...args: Parameters<typeof enableModes>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         enableModes(...args)
       }
@@ -295,16 +326,16 @@ cli
     ipcMain.handle(
       "menu:disableModes",
       (event, ...args: Parameters<typeof disableModes>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         disableModes(...args)
       }
     )
 
     ipcMain.on("app:getShowHiddenSecretsState", (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       event.returnValue = showHiddenSecrets
     })
@@ -312,8 +343,8 @@ cli
     ipcMain.on(
       "bip39:generateMnemonic",
       (event, ...args: Parameters<typeof generateMnemonic>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         event.returnValue = generateMnemonic(...args)
       }
@@ -322,16 +353,16 @@ cli
     ipcMain.on(
       "bip39:validateMnemonic",
       (event, ...args: Parameters<typeof validateMnemonic>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         event.returnValue = validateMnemonic(...args)
       }
     )
 
     ipcMain.on("bip39:wordlist", (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       event.returnValue = wordlist
     })
@@ -339,8 +370,8 @@ cli
     ipcMain.on(
       "blockcrypt:getDataLength",
       (event, ...args: Parameters<typeof getDataLength>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         event.returnValue = getDataLength(...args)
       }
@@ -349,35 +380,18 @@ cli
     ipcMain.handle(
       "generatePassphrase",
       async (event, ...args: Parameters<typeof generatePassphrase>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return generatePassphrase(...args)
       }
     )
 
     ipcMain.handle(
-      "zbarimg:decode",
-      async (event, ...args: Parameters<typeof zbarDecode>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
-        }
-        return zbarDecode(...args)
-      }
-    )
-
-    ipcMain.handle("zbarimg:installed", async (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
-      }
-      return zbarInstalled()
-    })
-
-    ipcMain.handle(
       "create",
       async (event, ...args: Parameters<typeof create>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return create(...args)
       }
@@ -386,8 +400,8 @@ cli
     ipcMain.handle(
       "duplicate",
       async (event, ...args: Parameters<typeof duplicate>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return duplicate(...args)
       }
@@ -396,8 +410,8 @@ cli
     ipcMain.handle(
       "print:getDefaultPrinter",
       async (event, ...args: Parameters<typeof getDefaultPrinter>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return getDefaultPrinter(...args)
       }
@@ -406,8 +420,8 @@ cli
     ipcMain.handle(
       "print:getPrinters",
       async (event, ...args: Parameters<typeof getPrinters>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return getPrinters(...args)
       }
@@ -416,8 +430,8 @@ cli
     ipcMain.handle(
       "print:getPrinterStatus",
       async (event, ...args: Parameters<typeof getPrinterStatus>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return getPrinterStatus(...args)
       }
@@ -426,16 +440,16 @@ cli
     ipcMain.handle(
       "print:print",
       async (event, ...args: Parameters<typeof print>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return print(...args)
       }
     )
 
     ipcMain.handle("save", async (event, ...args: Parameters<typeof save>) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       return save(...args)
     })
@@ -443,8 +457,8 @@ cli
     ipcMain.on(
       "totp:generateToken",
       (event, ...args: Parameters<typeof generateToken>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         event.returnValue = generateToken(...args)
       }
@@ -453,29 +467,31 @@ cli
     ipcMain.handle(
       "restore",
       async (event, ...args: Parameters<typeof restore>) => {
-        if (validateSender(event.senderFrame) !== true) {
-          return
+        if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+          throw new Error("Wrong sender")
         }
         return restore(...args)
       }
     )
 
     ipcMain.handle("restoreReset", (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       return restoreReset()
     })
 
     ipcMain.handle("window:toggleMaximize", (event) => {
-      if (validateSender(event.senderFrame) !== true) {
-        return
+      if (event.senderFrame && validateSender(event.senderFrame) !== true) {
+        throw new Error("Wrong sender")
       }
       const window = BrowserWindow.getFocusedWindow()
-      if (window.isMaximized()) {
-        window.unmaximize()
-      } else {
-        window.maximize()
+      if (window) {
+        if (window.isMaximized()) {
+          window.unmaximize()
+        } else {
+          window.maximize()
+        }
       }
     })
   })

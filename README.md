@@ -39,12 +39,12 @@ Copyright (c) Superbacked, Inc. — All rights reserved
 ### Step 2: install dependencies
 
 ```console
-$ sudo apt install --yes libfuse2 zbar-tools
+$ sudo apt install --yes libfuse2
 ```
 
 ### Step 3: right-click `.AppImage` file and select “Run as a program”
 
-> Heads-up: Ubuntu Desktop 24.04.1 LTS has AppArmor enabled by default so running `.AppImage` file using terminal with `--no-sandbox` flag might be necessary.
+> Heads-up: Ubuntu Desktop 24.04.3 LTS has AppArmor enabled by default so running `.AppImage` file using terminal with `--no-sandbox` flag might be necessary.
 
 ## Contribution guide (macOS)
 
@@ -77,6 +77,8 @@ $ echo 'export PATH=$PATH:/opt/homebrew/opt/node@22/bin' >> ~/.zshrc && source ~
 ```
 
 ### Step 4: install [Visual Studio Code](https://code.visualstudio.com/)
+
+> Heads-up: installing [Prettier - Code formatter](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) and [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) extensions is recommended.
 
 ### Step 5: install dependencies
 

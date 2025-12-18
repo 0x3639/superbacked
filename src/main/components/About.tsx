@@ -1,8 +1,11 @@
 import { Center, Modal, Space, Text, Title } from "@mantine/core"
 import { FunctionComponent, useEffect, useState } from "react"
-import SuperbackedIcon from "./superbacked.svg"
+import { useTranslation } from "react-i18next"
+
+import SuperbackedIcon from "@/src/main/superbacked.svg"
 
 const About: FunctionComponent = () => {
+  const { t } = useTranslation()
   const [showAbout, setShowAbout] = useState(false)
   useEffect(() => {
     const removeListener = window.api.menuAbout(() => {
@@ -19,23 +22,22 @@ const About: FunctionComponent = () => {
       onClose={() => {
         setShowAbout(false)
       }}
-      overlayBlur={4}
-      sx={{ zIndex: 500 }}
+      zIndex={400}
     >
       <Center>
         <SuperbackedIcon style={{ width: "25%" }} />
       </Center>
       <Space h="lg" />
-      <Title align="center">Superbacked</Title>
-      <Text align="center" color="dimmed">
-        Version: {window.api.version()}
+      <Title ta="center">Superbacked</Title>
+      <Text c="dimmed" ta="center">
+        {t("components.about.version")}: {window.api.version()}
       </Text>
       <Space h="lg" />
-      <Text align="center" size="sm" weight="bold">
-        Copyright (c) Superbacked, Inc.
+      <Text fw="bold" size="sm" ta="center">
+        {t("components.about.copyright")} (c) Superbacked, Inc.
       </Text>
-      <Text align="center" size="sm" weight="bold">
-        All rights reserved
+      <Text fw="bold" size="sm" ta="center">
+        {t("components.about.allRightsReserved")}
       </Text>
       <Space h="xl" />
     </Modal>
